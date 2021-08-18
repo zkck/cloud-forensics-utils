@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2020 Google Inc.
+# Copyright 2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,30 +17,21 @@
 import abc
 from typing import List, Dict, Union
 
-from kubernetes.client import (
-  AppsV1Api,
-  CoreV1Api,
-  # Types
-  V1Deployment,
-  V1ReplicaSet,
-)
+from kubernetes import client
 
-from libcloudforensics.providers.kubernetes.base import (
-  K8sNamespacedResource,
-  K8sPod,
-)
-from libcloudforensics.providers.kubernetes.selector import K8sSelector
+from libcloudforensics.providers.kubernetes import base
+from libcloudforensics.providers.kubernetes import selector
 
 
-class K8sWorkload(K8sNamespacedResource, metaclass=abc.ABCMeta):
+class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
   """Abstract class representing Kubernetes workloads.
 
   A Kubernetes workload could be a ReplicaSet, a Deployment, a StatefulSet.
   """
 
   K8sWorkloadType = Union[
-    V1Deployment,
-    V1ReplicaSet,
+    client.V1Deployment,
+    client.V1ReplicaSet,
   ]
 
   @abc.abstractmethod
@@ -52,18 +43,18 @@ class K8sWorkload(K8sNamespacedResource, metaclass=abc.ABCMeta):
     """
 
   @abc.abstractmethod
-  def Read(self) -> 'K8sWorkloadType':
+  def Read(self) -> K8sWorkloadType:
     pass  # Narrow down type hint
 
   def MatchLabels(self) -> Dict[str, str]:
     """Gets the label key-value pairs in the matchLabels field.
 
     Returns:
-      Dict[str, str]: The label key-value pairs in the matchLabels field.
+      Dict[str, str]: The labels that will be on the pods of this workload.
 
     Raises:
-      NotImplementedError: If matchExpressions exist, meaning using matchLabels
-        on their own would be inaccurate.
+      NotImplementedError: If matchExpressions exist, in which case using the
+        matchLabels will be inaccurate.
     """
     read = self.Read()
     # Get the selectors for this deployment
@@ -74,33 +65,33 @@ class K8sWorkload(K8sNamespacedResource, metaclass=abc.ABCMeta):
     match_labels: Dict[str, str] = read.spec.selector.match_labels
     return match_labels
 
-  def GetCoveredPods(self) -> List[K8sPod]:
+  def GetCoveredPods(self) -> List[base.K8sPod]:
     """Gets a list of Kubernetes pods covered by this workload.
 
     Returns:
       List[K8sPod]: A list of pods covered by this workload.
     """
-    api = self._Api(CoreV1Api)
+    api = self._Api(client.CoreV1Api)
 
     # Get the labels for this workload, and create a selector
-    selector = K8sSelector.FromLabelsDict(self.PodMatchLabels())
+    labels_selector = selector.K8sSelector.FromLabelsDict(self.PodMatchLabels())
 
     # Extract the pods
     pods = api.list_namespaced_pod(
       self.namespace,
-      **selector.ToKeywords()
+      **labels_selector.ToKeywords()
     )
 
     # Convert to pod objects
-    return [K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
+    return [base.K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
             for pod in pods.items]
 
 
 class K8sDeployment(K8sWorkload):
   """Class representing a Kubernetes deployment."""
 
-  def Read(self) -> V1Deployment:
-    api = self._Api(AppsV1Api)
+  def Read(self) -> client.V1Deployment:
+    api = self._Api(client.AppsV1Api)
     return api.read_namespaced_deployment(self.name, self.namespace)
 
   def _ReplicaSet(self) -> 'K8sReplicaSet':
@@ -110,8 +101,8 @@ class K8sDeployment(K8sWorkload):
       K8sReplicaSet: The matching ReplicaSet of this deployment.
     """
     # Find the matching ReplicaSets, based on this deployment's matchLabels
-    replica_sets_selector = K8sSelector.FromLabelsDict(self.MatchLabels())
-    replica_sets = self._Api(AppsV1Api).list_namespaced_replica_set(
+    replica_sets_selector = selector.K8sSelector.FromLabelsDict(self.MatchLabels())
+    replica_sets = self._Api(client.AppsV1Api).list_namespaced_replica_set(
       self.namespace,
       **replica_sets_selector.ToKeywords()
     ).items
@@ -138,6 +129,6 @@ class K8sReplicaSet(K8sWorkload):
   def PodMatchLabels(self) -> Dict[str, str]:
     return self.MatchLabels()
 
-  def Read(self) -> V1Deployment:
-    api = self._Api(AppsV1Api)
+  def Read(self) -> client.V1Deployment:
+    api = self._Api(client.AppsV1Api)
     return api.read_namespaced_replica_set(self.name, self.namespace)
