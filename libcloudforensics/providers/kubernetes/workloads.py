@@ -83,8 +83,9 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
     )
 
     # Convert to pod objects
-    return [base.K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
-            for pod in pods.items]
+    return [
+      base.K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
+      for pod in pods.items]
 
 
 class K8sDeployment(K8sWorkload):
@@ -101,7 +102,8 @@ class K8sDeployment(K8sWorkload):
       K8sReplicaSet: The matching ReplicaSet of this deployment.
     """
     # Find the matching ReplicaSets, based on this deployment's matchLabels
-    replica_sets_selector = selector.K8sSelector.FromLabelsDict(self.MatchLabels())
+    replica_sets_selector = selector.K8sSelector.FromLabelsDict(
+      self.MatchLabels())
     replica_sets = self._Api(client.AppsV1Api).list_namespaced_replica_set(
       self.namespace,
       **replica_sets_selector.ToKeywords()
@@ -122,6 +124,7 @@ class K8sDeployment(K8sWorkload):
 
   def PodMatchLabels(self) -> Dict[str, str]:
     return self._ReplicaSet().MatchLabels()
+
 
 class K8sReplicaSet(K8sWorkload):
   """Class representing a Kubernetes deployment."""
