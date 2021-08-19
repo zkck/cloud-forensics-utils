@@ -44,13 +44,21 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def Read(self) -> K8sWorkloadType:
-    pass  # Narrow down type hint
+    """Override of abstract method."""  # Narrows down type hint
+
+  @abc.abstractmethod
+  def OrphanPods(self) -> None:
+    """Orphans the pods covered by this workload.
+
+    Note that calling this function may entail deleting the object
+    upon which this method was called.
+    """
 
   def MatchLabels(self) -> Dict[str, str]:
     """Gets the label key-value pairs in the matchLabels field.
 
     Returns:
-      Dict[str, str]: The labels that will be on the pods of this workload.
+      Dict[str, str]: The labels in the matchLabels field.
 
     Raises:
       NotImplementedError: If matchExpressions exist, in which case using the
@@ -87,6 +95,25 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
 class K8sDeployment(K8sWorkload):
   """Class representing a Kubernetes deployment."""
 
+  def OrphanPods(self) -> None:
+    """Override of abstract method.
+
+    To achieve the goal of orphaning the pods, this deployment and its matching
+    ReplicaSet are deleted, without cascading.
+    """
+    self.Delete(cascade=False)
+    self._ReplicaSet().Delete(cascade=False)
+
+  def Delete(self, cascade: bool = True) -> None:
+    """Override of abstract method."""
+    api = self._Api(client.AppsV1Api)
+    if cascade:
+      api.delete_namespaced_deployment(self.name, self.namespace)
+    else:
+      api.delete_namespaced_deployment(self.name, self.namespace, body={
+        'propagationPolicy': 'Orphan'
+      })
+
   def Read(self) -> client.V1Deployment:
     api = self._Api(client.AppsV1Api)
     return api.read_namespaced_deployment(self.name, self.namespace)
@@ -97,9 +124,13 @@ class K8sDeployment(K8sWorkload):
     Returns:
       K8sReplicaSet: The matching ReplicaSet of this deployment.
     """
-    # Find the matching ReplicaSets, based on this deployment's matchLabels
+
+    # The matching ReplicaSet will have labels corresponding to this
+    # deployment's matchLabels.
     replica_sets_selector = selector.K8sSelector.FromLabelsDict(
-      self.MatchLabels())
+      self.MatchLabels()
+    )
+
     replica_sets = self._Api(client.AppsV1Api).list_namespaced_replica_set(
       self.namespace,
       **replica_sets_selector.ToKeywords()
@@ -119,15 +150,32 @@ class K8sDeployment(K8sWorkload):
     )
 
   def PodMatchLabels(self) -> Dict[str, str]:
+    """Override of abstract method."""
     return self._ReplicaSet().MatchLabels()
 
 
 class K8sReplicaSet(K8sWorkload):
   """Class representing a Kubernetes deployment."""
 
+  def OrphanPods(self) -> None:
+    """Override of abstract method."""
+    self.Delete(cascade=False)
+
+  def Delete(self, cascade: bool = True) -> None:
+    """Override of abstract method."""
+    api = self._Api(client.AppsV1Api)
+    if cascade:
+      api.delete_namespaced_replica_set(self.name, self.namespace)
+    else:
+      api.delete_namespaced_replica_set(self.name, self.namespace, body={
+        'propagationPolicy': 'Orphan'
+      })
+
   def PodMatchLabels(self) -> Dict[str, str]:
+    """Override of abstract method."""
     return self.MatchLabels()
 
   def Read(self) -> client.V1Deployment:
+    """Override of abstract method."""
     api = self._Api(client.AppsV1Api)
     return api.read_namespaced_replica_set(self.name, self.namespace)

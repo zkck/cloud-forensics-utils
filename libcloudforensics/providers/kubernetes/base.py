@@ -84,7 +84,6 @@ class K8sResource(K8sClient, metaclass=abc.ABCMeta):
       object: The result of this resource's matching read operation.
     """
 
-
 class K8sCluster(K8sClient):
   """Class representing a Kubernetes cluster."""
 
@@ -147,6 +146,21 @@ class K8sNamespacedResource(K8sResource, metaclass=abc.ABCMeta):
     """
     super().__init__(api_client, name)
     self.namespace = namespace
+
+  @abc.abstractmethod
+  def Delete(self, cascade: bool = True) -> None:
+    """Deletes this resource from the Kubernetes cluster.
+
+    For determining how the deletion will cascade, the propagationPolicy
+    parameter is used.
+
+    https://kubernetes.io/docs/tasks/administer-cluster/use-cascading-deletion/#set-orphan-deletion-policy  # pylint: disable=line-too-long
+
+    Args:
+      cascade (bool): If true, deletion will be propagated to child objects.
+        If false, only this resource will be deleted and the child objects will
+        be orphaned.
+    """
 
 
 class K8sNode(K8sResource):
@@ -211,6 +225,15 @@ class K8sPod(K8sNamespacedResource):
 
   https://kubernetes.io/docs/concepts/workloads/pods/
   """
+
+  def Delete(self, cascade: bool = True) -> None:
+    """Override of abstract method.
+
+    The cascade argument is ignored here, as a pod's deletion will not cascade
+    to any other Kubernetes objects.
+    """
+    api = self._Api(client.CoreV1Api)
+    return api.delete_namespaced_pod(self.name, self.namespace)
 
   def Read(self) -> client.V1Pod:
     """Override of abstract method."""
