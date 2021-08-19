@@ -19,7 +19,7 @@ from typing import List, TypeVar, Callable, Optional
 
 from kubernetes import client
 
-from libcloudforensics.providers.kubernetes import selector
+from libcloudforensics.providers.kubernetes import selector, workloads
 
 
 class K8sClient(metaclass=abc.ABCMeta):
@@ -123,6 +123,9 @@ class K8sCluster(K8sClient):
     # Convert to node objects
     return [K8sNode(self._api_client, node.metadata.name)
             for node in nodes.items]
+
+  def Workload(self, workload_id: str, namespace: str):
+    return workloads.K8sDeployment(self._api_client, workload_id, namespace)
 
 
 class K8sNamespacedResource(K8sResource, metaclass=abc.ABCMeta):
