@@ -57,13 +57,12 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
         matchLabels will be inaccurate.
     """
     read = self.Read()
-    # Get the selectors for this deployment
+
     if read.spec.selector.match_expressions is not None:
       raise NotImplementedError('matchExpressions exist, meaning using '
                                 'matchLabels will be inaccurate.')
-    # Extract with necessary type annotation
-    match_labels: Dict[str, str] = read.spec.selector.match_labels
-    return match_labels
+
+    return read.spec.selector.match_labels  # type: Dict[str, str]
 
   def GetCoveredPods(self) -> List[base.K8sPod]:
     """Gets a list of Kubernetes pods covered by this workload.
@@ -73,16 +72,13 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
     """
     api = self._Api(client.CoreV1Api)
 
-    # Get the labels for this workload, and create a selector
     labels_selector = selector.K8sSelector.FromLabelsDict(self.PodMatchLabels())
 
-    # Extract the pods
     pods = api.list_namespaced_pod(
       self.namespace,
       **labels_selector.ToKeywords()
     )
 
-    # Convert to pod objects
     return [
       base.K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
       for pod in pods.items]
