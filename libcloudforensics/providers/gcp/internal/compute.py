@@ -160,35 +160,58 @@ class GoogleCloudCompute(common.GoogleCloudComputeClient):
 
     return disks
 
-  def ListMIGS(self, zone) -> Dict[str, List['GoogleComputeInstance']]:
+  def ListMIGS(self, zone: str) -> Dict[str, List['GoogleComputeInstance']]:
+    """Gets the managed instance groups in a particular zone.
+
+    Returns a dictionary, with as keys the managed instance groups, and as
+    values a list of instances belonging to the group.
+
+    Args:
+      zone (str): The zone in which to list managed instance groups.
+
+    Returns:
+      Dict[str, List[GoogleComputeInstance]]: A mapping from managed instance
+        groups to their managed GCE instances.
+    """
     groups_client = self.GceApi().instanceGroupManagers()
-
-    def ListInstancesForMIG(group_id: str) -> List['GoogleComputeInstance']:
-      responses = common.ExecuteRequest(groups_client, 'listManagedInstances', {
-        'project' : self.project_id,
-        'zone' : zone,
-        'instanceGroupManager' : group_id,
-      })
-      managed_instances = []
-      for r in responses:
-        for instance in r.get('managedInstances', []):
-          name = instance['instance'].split('/')[-1]
-          managed_instances.append(
-            GoogleComputeInstance(self.project_id, zone, name)
-          )
-      return managed_instances
-
-    groups = defaultdict(list)
-    params = {
+    responses = common.ExecuteRequest(groups_client, 'list', {
       'project': self.project_id,
       'zone': zone,
-    }
-    for response in common.ExecuteRequest(groups_client, 'list', params):
+    })
+
+    groups = defaultdict(list)
+    for response in responses:
       for group in response.get('items', []):
-        groups[group['name']].extend(ListInstancesForMIG(group['name']))
+        instances = self._ListInstancesForMIG(zone, group['name'])
+        groups[group['name']].extend(instances)
+
     return groups
 
+  def _ListInstancesForMIG(self, zone: str, group_id: str) -> List['GoogleComputeInstance']:
+    """Gets the list of instances managed by a managed instance group.
 
+    Args:
+      zone (str): The zone in which resides the managed instance group.
+      group_id (str): The identifier of the managed instance group
+
+    Returns:
+      List[GoogleComputeInstance]: List of GCE instances managed by the
+        managed instance group.
+    """
+    groups_client = self.GceApi().instanceGroupManagers()
+    responses = common.ExecuteRequest(groups_client, 'listManagedInstances', {
+      'project' : self.project_id,
+      'zone' : zone,
+      'instanceGroupManager' : group_id,
+    })
+    managed_instances = []
+    for response in responses:
+      for instance in response.get('managedInstances', []):
+        # The returned name is a URL, with the instance name at the end
+        name = instance['instance'].split('/')[-1]
+        instance = GoogleComputeInstance(self.project_id, zone, name)
+        managed_instances.append(instance)
+    return managed_instances
 
   def GetInstance(self, instance_name: str) -> 'GoogleComputeInstance':
     """Get instance from project.
