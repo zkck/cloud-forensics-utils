@@ -19,7 +19,7 @@ from typing import List, TypeVar, Callable, Optional
 
 from kubernetes import client
 
-from libcloudforensics.providers.kubernetes import selector, workloads
+from libcloudforensics.providers.kubernetes import selector
 
 
 class K8sClient(metaclass=abc.ABCMeta):
@@ -83,50 +83,6 @@ class K8sResource(K8sClient, metaclass=abc.ABCMeta):
     Returns:
       object: The result of this resource's matching read operation.
     """
-
-class K8sCluster(K8sClient):
-  """Class representing a Kubernetes cluster."""
-
-  def ListPods(self, namespace: Optional[str] = None) -> List['K8sPod']:
-    """Lists the pods of this cluster, possibly filtering for a namespace.
-
-    Args:
-      namespace (str): Optional. The namespace in which to list the pods.
-
-    Returns:
-      List[K8sPod]: The list of pods for the namespace, or in all namespaces
-        if none is specified.
-    """
-    api = self._Api(client.CoreV1Api)
-
-    # Collect pods
-    if namespace is not None:
-      pods = api.list_namespaced_pod(namespace)
-    else:
-      pods = api.list_pod_for_all_namespaces()
-
-    # Convert to node objects
-    return [K8sPod(self._api_client, pod.metadata.name, pod.metadata.namespace)
-            for pod in pods.items]
-
-  def ListNodes(self) -> List['K8sNode']:
-    """Lists the nodes of this cluster.
-
-    Returns:
-      List[K8sNode]: The list of nodes in this cluster.
-    """
-    api = self._Api(client.CoreV1Api)
-
-    # Collect pods
-    nodes = api.list_node()
-
-    # Convert to node objects
-    return [K8sNode(self._api_client, node.metadata.name)
-            for node in nodes.items]
-
-  def Workload(self, workload_id: str, namespace: str):
-    return workloads.K8sDeployment(self._api_client, workload_id, namespace)
-
 
 class K8sNamespacedResource(K8sResource, metaclass=abc.ABCMeta):
   """Class representing a Kubernetes resource, in a certain namespace.

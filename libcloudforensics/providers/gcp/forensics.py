@@ -26,8 +26,9 @@ from googleapiclient.errors import HttpError
 
 from libcloudforensics.providers.gcp.internal import project as gcp_project
 from libcloudforensics.providers.gcp.internal import common
+from libcloudforensics.providers.gcp.internal import compute
 from libcloudforensics.providers.gcp.internal import gke
-from libcloudforensics.providers.kubernetes import base as k8s
+from libcloudforensics.providers.kubernetes import cluster as k8s
 from libcloudforensics import logging_utils
 from libcloudforensics import errors
 
@@ -494,9 +495,10 @@ def QuarantineGKEWorkload(project_id: str,
                           namespace: str,
                           workload_id: str) -> None:
 
-  cluster = gke.GkeCluster(project_id, zone, cluster_id)
-  k8s_cluster = k8s.K8sCluster(cluster.GetCredentials())
-  k8s_workload = k8s_cluster.Workload(workload_id, namespace)
+  gke_cluster = gke.GkeCluster(project_id, zone, cluster_id)
+  k8s_cluster = k8s.K8sCluster(gke_cluster.GetCredentials())
+
+  k8s_workload = k8s_cluster.GetDeployment(workload_id, namespace)
 
   compromised_instances = []
   pods = k8s_workload.GetCoveredPods()
@@ -504,14 +506,16 @@ def QuarantineGKEWorkload(project_id: str,
     node = pod.GetNode()
     # Cordoning makes the node unschedulable, meaning that no new pods will be
     # placed on the node.
-    logger.info('Cordoning Kubernetes node {0:s}...'
-                ''.format(node.name))
+    logger.info('Cordoning Kubernetes node {0:s} holding {1:s} pod from {2:s} '
+                'deployment...'
+                ''.format(node.name, pod.name, k8s_workload.name))
     node.Cordon()
     instance_name = node.name
     instance = compute.GoogleComputeInstance(project_id, zone, instance_name)
     # Abandoning from Managed Instance Group prevents the node from being
     # marked as unhealthy and re-created.
-    logger.info('Abandoning instance {0:s} from managed instance group...'
+    logger.info('Abandoning instance {0:s} from cluster\'s managed instance '
+                'group...'
                 ''.format(node.name))
     instance.AbandonFromMIG('TODO')
     # Save for later use, as we will be deleting the workload and will no
