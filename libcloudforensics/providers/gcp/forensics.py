@@ -500,6 +500,16 @@ def QuarantineGKEWorkload(project_id: str,
 
   k8s_workload = k8s_cluster.GetDeployment(workload_id, namespace)
 
+  # Build a dict to find a managed instance group via an instance name,
+  # so that we can instance.AbandonFromMIG
+  groups = compute.GoogleCloudCompute(project_id).ListMIGS(zone)
+  groups_by_instance = {}
+  for group_id, instances in groups.items():
+    for instance in instances:
+      if instance.name in groups_by_instance:
+        raise RuntimeError('Multiple managed instance groups for instance')
+      groups_by_instance[instance.name] = group_id
+
   compromised_instances = []
   pods = k8s_workload.GetCoveredPods()
   for pod in pods:
@@ -517,7 +527,7 @@ def QuarantineGKEWorkload(project_id: str,
     logger.info('Abandoning instance {0:s} from cluster\'s managed instance '
                 'group...'
                 ''.format(node.name))
-    instance.AbandonFromMIG('TODO')
+    instance.AbandonFromMIG(groups_by_instance[instance.name])
     # Save for later use, as we will be deleting the workload and will no
     # longer be able to find the workload's covered pods
     compromised_instances.append(instance)

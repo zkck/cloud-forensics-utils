@@ -17,6 +17,7 @@
 import os
 import subprocess
 import time
+from collections import defaultdict
 from typing import Dict, Tuple, List, TYPE_CHECKING, Union, Optional, Any
 
 from googleapiclient.errors import HttpError
@@ -158,6 +159,36 @@ class GoogleCloudCompute(common.GoogleCloudComputeClient):
           pass
 
     return disks
+
+  def ListMIGS(self, zone) -> Dict[str, List['GoogleComputeInstance']]:
+    groups_client = self.GceApi().instanceGroupManagers()
+
+    def ListInstancesForMIG(group_id: str) -> List['GoogleComputeInstance']:
+      responses = common.ExecuteRequest(groups_client, 'listManagedInstances', {
+        'project' : self.project_id,
+        'zone' : zone,
+        'instanceGroupManager' : group_id,
+      })
+      managed_instances = []
+      for r in responses:
+        for instance in r.get('managedInstances', []):
+          name = instance['instance'].split('/')[-1]
+          managed_instances.append(
+            GoogleComputeInstance(self.project_id, zone, name)
+          )
+      return managed_instances
+
+    groups = defaultdict(list)
+    params = {
+      'project': self.project_id,
+      'zone': zone,
+    }
+    for response in common.ExecuteRequest(groups_client, 'list', params):
+      for group in response.get('items', []):
+        groups[group['name']].extend(ListInstancesForMIG(group['name']))
+    return groups
+
+
 
   def GetInstance(self, instance_name: str) -> 'GoogleComputeInstance':
     """Get instance from project.
