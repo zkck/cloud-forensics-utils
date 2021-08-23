@@ -29,10 +29,6 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
   A Kubernetes workload could be a ReplicaSet, a Deployment, a StatefulSet.
   """
 
-  K8sWorkloadType = Union[
-    client.V1Deployment,
-    client.V1ReplicaSet,
-  ]
 
   @abc.abstractmethod
   def PodMatchLabels(self) -> Dict[str, str]:
@@ -43,7 +39,10 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
     """
 
   @abc.abstractmethod
-  def Read(self) -> K8sWorkloadType:
+  def Read(self) -> Union[
+    client.V1Deployment,
+    client.V1ReplicaSet,
+  ]:
     """Override of abstract method."""  # Narrows down type hint
 
   @abc.abstractmethod
@@ -70,7 +69,8 @@ class K8sWorkload(base.K8sNamespacedResource, metaclass=abc.ABCMeta):
       raise NotImplementedError('matchExpressions exist, meaning using '
                                 'matchLabels will be inaccurate.')
 
-    return read.spec.selector.match_labels  # type: Dict[str, str]
+    match_labels = read.spec.selector.match_labels  # type: Dict[str, str]
+    return match_labels
 
   def GetCoveredPods(self) -> List[base.K8sPod]:
     """Gets a list of Kubernetes pods covered by this workload.
