@@ -18,22 +18,18 @@ import base64
 import random
 import re
 import subprocess
-from typing import TYPE_CHECKING, List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any
 
 from google.auth.exceptions import DefaultCredentialsError
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
-from libcloudforensics.providers.gcp.internal import project as gcp_project
+from libcloudforensics import errors
+from libcloudforensics import logging_utils
 from libcloudforensics.providers.gcp.internal import common
 from libcloudforensics.providers.gcp.internal import compute
 from libcloudforensics.providers.gcp.internal import gke
-from libcloudforensics.providers.kubernetes import cluster as k8s
-from libcloudforensics import logging_utils
-from libcloudforensics import errors
-
-if TYPE_CHECKING:
-  from libcloudforensics.providers.gcp.internal import compute
+from libcloudforensics.providers.gcp.internal import project as gcp_project
 
 logging_utils.SetUpLogger(__name__)
 logger = logging_utils.GetLogger(__name__)
@@ -494,9 +490,9 @@ def QuarantineGKEWorkload(project_id: str,
                           cluster_id: str,
                           namespace: str,
                           workload_id: str) -> None:
-
+  """Quarantines the GKE workload."""
   gke_cluster = gke.GkeCluster(project_id, zone, cluster_id)
-  k8s_cluster = k8s.K8sCluster(gke_cluster.GetCredentials())
+  k8s_cluster = gke_cluster.GetK8sCluster()
 
   k8s_workload = k8s_cluster.GetDeployment(workload_id, namespace)
 
