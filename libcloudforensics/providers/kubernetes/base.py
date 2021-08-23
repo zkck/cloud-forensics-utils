@@ -31,7 +31,7 @@ class K8sClient(metaclass=abc.ABCMeta):
     """Creates an object holding Kubernetes API client.
 
     Args:
-      api_client (client.ApiClient): The authenticated Kubernetes API client to
+      api_client (client.ApiClient): The Kubernetes API client to
         the cluster.
     """
     self._api_client = api_client
